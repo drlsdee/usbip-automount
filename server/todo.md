@@ -8,3 +8,19 @@ yum install kmod-usbip usbip-utils usbutils
 ### На 2018-11-21
 В elrepo версия пакета kmod-usbip обновилась и может вызывать конфликты. Если так происходит, нужно установить более старую версию:
 yum install kmod-usbip-1.0.1-2.el7_5.elrepo
+
+# Install order
+## Install packages
+1. usbutils
+2. kernel modules
+3. usbip utils
+## Install scripts
+1. /etc/modules-load.d/usbipd.conf
+2. /scripts/usbipd.sh
+3. /etc/systemd/system/usbipd.service
+## Enable service
+
+# ToDo here
+## Filter devices by vendor's name
+In progress.
+## Unbind devices when service stops

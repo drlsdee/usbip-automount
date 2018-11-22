@@ -7,12 +7,19 @@ PATH=$PATH
 # and filters output by the keyword "busid".
 # Then, with the "cut", only the bus IDs are cut
 # (space as a separator, 4th field is selected).
-
-BUSIDS=$(echo "$(usbip list -l | grep busid)" | cut -d ' ' -f 4)
-
 #
+# BUSIDS=$(usbip list -l | grep busid | cut -d ' ' -f 4)
+
+# Another variant with "usbip list" command with -p - parsable list format
+# Here we filter output by vendor's ID (0529 is Aladdin Knowledge Systems),
+# define separators "=" and "#" and select column with bus IDs
+#
+VENDOR=$"0529"
+#
+BUSIDS=$(usbip list -p -l | grep $VENDOR | awk -F '[=#]' '{print $2}')
+
 # Filter by vendor's name:
-# VENDOR=$(echo "Aladdin")
+# VENDOR=$"Aladdin"
 #
 # Select string with the specified vendor's name and string before.
 # BUSIDS=$(echo "$(usbip list -l | grep -B 1 $VENDOR | grep busid)" | cut -d ' ' -f 4)

@@ -23,4 +23,9 @@ yum install kmod-usbip-1.0.1-2.el7_5.elrepo
 # ToDo here
 ## Filter devices by vendor's name
 In progress.
+1. Name and/or ID are defined in $VENDOR variable in /scripts/usbipd.sh
+2. Сопоставить ID и дружественные имена вендоров.
+3. Передавать имя/айди вендора как аргумент при запуске.
+4. Дать возможность выбора вендора при установке.
+5. Дать возможность множественного выбора.
 ## Unbind devices when service stops

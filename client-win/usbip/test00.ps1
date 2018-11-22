@@ -40,8 +40,11 @@ IF ($USBIP_clientname -eq $null)
 
 $USBIP_inetaddr=[System.Net.Dns]::GetHostAddresses("$USBIP_hostname") | Select-Object IPAddressToString -expandproperty IPAddressToString
 
-#Get path to current script. Yes, this script should be placed in same dir with USBIP client.
+# Get path to current script. Yes, this script should be placed in same dir with USBIP client.
 $ScriptPath = split-path -parent $MyInvocation.MyCommand.Definition
+
+# Set CMD
+$CMD = "$ScriptPath\$USBIP_clientname"
 
 function Test-Port()
     {
@@ -82,43 +85,30 @@ function Test-Port()
             }
     }
 
-function DeviceList() #Gets list of shared devices
-    {
-    #Copied from https://stackoverflow.com/a/8762068
-    #Create new process
-    $USBIPlistpinfo = New-Object System.Diagnostics.ProcessStartInfo
-    #Set filename with path
-    $USBIPlistpinfo.FileName = "$scriptPath\$USBIP_clientname"
-    #Set redirect of stderr from where we'll get info about shared devices
-    $USBIPlistpinfo.RedirectStandardError = $true
-    $USBIPlistpinfo.UseShellExecute = $false
-    #Set working directory
-    $USBIPlistpinfo.WorkingDirectory = "$scriptPath"
-    #Give args to .EXE
-    $USBIPlistpinfo.Arguments = "-l $USBIP_hostname"
-    #Start process
-    $USBIPlistOutput = New-Object System.Diagnostics.Process
-    $USBIPlistOutput.StartInfo = $USBIPlistpinfo
-    #Disable window
-    $USBIPlistOutput.Start() | Out-Null
-    #Set variable for raw stderr output
-    $USBIPlistStdErr = $USBIPlistOutput.StandardError.ReadToEnd()
-    #And then split it to lines and convert into array.
-    $devlistraw = $USBIPlistStdErr.Split(")")
-    $devArray=@($devlistraw)
-    echo "====in function===="
-    $USBIPlistStdErr.GetType()
-    echo "====in function===="
+function Device-List-and-Mount() {
+    # List all exported devices and pipe stderr to variable
+    Invoke-Expression "$CMD -l  $USBIP_hostname" -ErrorVariable ErrOutput
+
+    # Select part of output which contains info about devices. Convert it from error to string.
+    $DevicesRaw = $ErrOutput[1].ToString()
+
+    # Split by Newline char | Select strings by pattern "xxxx:xxxx" where "x" may be letter or digit
+    $DevArray = $DevicesRaw.Split("`n") -ne $null | Select-String -Pattern '[a-z0-9]{4}:[a-z0-9]{4}'
+    # Define array with device IDs
+    $BusIDs = @()
+
+    [int]$DevNumber = $null
+    While ($DevNumber -lt $DevArray.Count) {
+        # Convert MatchInfo to string and select busID
+        $BusIDs += $DevArray[$DevNumber].ToString().Substring(5,3)
+        $DevNumber ++
+        }
+
+    foreach ($ID in $BusIDs) {
+        echo $ID
+        Start-Process $CMD -ArgumentList "-a $USBIP_hostname $ID" -NoNewWindow
+        }
     }
+
 Test-Port
-
-# List all exported devices and pipe stderr to variable
-Invoke-Expression "$ScriptPath\$USBIP_clientname -l  $USBIP_hostname" -ErrorVariable ErrOutput
-
-# Select part of output which contains info about devices. Convert it from error to string.
-$DevicesRaw = $ErrOutput[1].ToString()
-# Split by Newline char | Select strings by pattern "xxxx:xxxx" where "x" may be letter or digit
-$DevArray = $DevicesRaw.Split("`n") -ne $null | Select-String -Pattern '[a-z0-9]{4}:[a-z0-9]{4}'
-
-$BusID = $DevArray[0].ToString().Substring(5,3)
-$BusID
+Device-List-and-Mount

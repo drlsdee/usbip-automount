@@ -19,6 +19,10 @@ yum install kmod-usbip-1.0.1-2.el7_5.elrepo
 2. /scripts/usbipd.sh
 3. /etc/systemd/system/usbipd.service
 ## Enable service
+1. Enable service
+2. Open port for incoming:
+firewall-cmd --permanent --zone=(some zone or all zones) --add-port=3240/tcp
+firewall-cmd –reload
 
 # ToDo here
 ## Filter devices by vendor's name

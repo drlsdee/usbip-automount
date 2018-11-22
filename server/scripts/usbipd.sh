@@ -35,14 +35,25 @@ BUSIDS=$(usbip list -p -l | grep $VENDOR | awk -F '[=#]' '{print $2}')
 
 PORT=$(usbip port | grep 'Port in Use' | cut -d ' ' -f 2 | tr -dc '0-9')
 
-# Service start
-usbipd -D
+case $1 in
+        "start")
+                # Service start
+                usbipd -D
 
-# For each of discovered devices:
-for ID in $BUSIDS
-do
-	usbip bind -b $ID # bind device
-	usbip attach --remote=localhost --busid=$ID # attach locally
-	sleep 2 # wait a bit
-	usbip detach --port=$PORT # and detach
-done # devices are ready to mount remotely
+                # For each of discovered devices:
+                for ID in $BUSIDS
+                        do
+                                usbip bind -b $ID # bind device
+                                usbip attach --remote=localhost --busid=$ID # attach locally
+                                sleep 2 # wait a bit
+                                usbip detach --port=$PORT # and detach
+                        done # devices are ready to mount remotely
+        ;;
+        "stop")
+                for ID in $BUSIDS
+                        do
+                                usbip unbind -b $ID # unbind device
+                        done # devices are unbinded
+				pkill usbip*
+		;;
+esac

@@ -28,4 +28,4 @@ In progress.
 3. Передавать имя/айди вендора как аргумент при запуске.
 4. Дать возможность выбора вендора при установке.
 5. Дать возможность множественного выбора.
-## Unbind devices when service stops
+6. Unbind devices when service stops - Done.

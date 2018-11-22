@@ -10,6 +10,13 @@ PATH=$PATH
 
 BUSIDS=$(echo "$(usbip list -l | grep busid)" | cut -d ' ' -f 4)
 
+#
+# Filter by vendor's name:
+# VENDOR=$(echo "Aladdin")
+#
+# Select string with the specified vendor's name and string before.
+# BUSIDS=$(echo "$(usbip list -l | grep -B 1 $VENDOR | grep busid)" | cut -d ' ' -f 4)
+
 # This variable shows the port used when the device is connected locally.
 # We need to connect the device and disconnect it. Due to a bug in the server
 # software, when you try to mount on the client, an error of the following

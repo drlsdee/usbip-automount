@@ -29,7 +29,8 @@ firewall-cmd –reload
 In progress.
 1. Name and/or ID are defined in $VENDOR variable in /scripts/usbipd.sh
 2. Сопоставить ID и дружественные имена вендоров.
-3. Передавать имя/айди вендора как аргумент при запуске.
+3. Передавать имя/айди вендора как аргумент при запуске службы.
 4. Дать возможность выбора вендора при установке.
 5. Дать возможность множественного выбора.
+Множественные аргументы для юнитов - пример: https://superuser.com/questions/728951/systemd-giving-my-service-multiple-arguments
 6. Unbind devices when service stops - Done.

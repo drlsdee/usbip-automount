@@ -1,0 +1,10 @@
+[Unit]
+Description=USBIPd
+
+[Service]
+ExecStart=/scripts/usbipd
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

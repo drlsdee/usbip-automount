@@ -41,10 +41,17 @@ IF ($USBIP_clientname -eq $null)
 $USBIP_inetaddr=[System.Net.Dns]::GetHostAddresses("$USBIP_hostname") | Select-Object IPAddressToString -expandproperty IPAddressToString
 
 # Get path to current script. Yes, this script should be placed in same dir with USBIP client.
-$ScriptPath = split-path -parent $MyInvocation.MyCommand.Definition
+$ScriptPath = $MyInvocation.MyCommand.Definition | Split-Path
 
 # Set CMD
 $CMD = "$ScriptPath\$USBIP_clientname"
+
+# Set location
+Set-Location -Path $ScriptPath
+
+# Set new source for Application EventLog
+# New-EventLog –LogName Application –Source “USBIP client”
+
 
 function Test-Port()
     {
@@ -110,5 +117,19 @@ function Device-List-and-Mount() {
         }
     }
 
+function WatchDevices()
+    {
+        # Just get list of any USB devices
+        $AllDevices = gwmi Win32_USBControllerDevice
+        WHILE ($AllDevices) {
+            echo "Present"
+            # Write-EventLog -LogName "Application" -Source "USBIP client" -EventID 3001 -EntryType Information -Message "Devices are present."
+            Sleep 60
+            $AllDevices = gwmi Win32_USBControllerDevice
+            } 
+        echo "Not found"
+    }
+
 Test-Port
 Device-List-and-Mount
+WatchDevices

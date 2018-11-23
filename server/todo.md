@@ -34,3 +34,4 @@ In progress.
 5. Дать возможность множественного выбора.
 Множественные аргументы для юнитов - пример: https://superuser.com/questions/728951/systemd-giving-my-service-multiple-arguments
 6. Unbind devices when service stops - Done.
+7. Реакция на физическое подключение и отключение устройства.

@@ -17,12 +17,78 @@ $optionArray = @(
     "--help" # Print this help.
 )
 
-function JoinStringsNotNull ([array]$array) {
-    $string = ($array.Where({$_.Length -gt 0})) -join ' '
-    return $string
-}
+function ConcatArguments {
+    [CmdletBinding()]
+    param (
+        # Enables internal debugging.
+        [Parameter()]
+        [bool]
+        $internalDBG,
 
-$hostString = JoinStringsNotNull $hostlist
+        # List of possible actions.
+        [Parameter(Mandatory)]
+        [ValidateSet("List","Mount","Unmount","Port")]
+        [string]$Action,
+
+        # Hostname or IP address of host.
+        [Parameter(DontShow)]
+        [string]
+        $singleHost,
+
+        # Bus ID of remote device.
+        [Parameter(DontShow)]
+        [string]
+        $busID,
+
+        # Ports to detach
+        [Parameter(DontShow)]
+        [array]
+        $Ports
+    )
+
+    function ArrayToString {
+        param (
+            # Array of strings to join
+            [array]
+            $Array
+        )
+        $String = ($array.Where({($_.Length -gt 0)})) -join ' '
+        return $String    
+    }
+
+    switch ($Action) {
+        "List" {
+            $command = $optionArray[2]
+            $target = ArrayToString $hostList
+        }
+        "Mount" {
+            $command = $optionArray[0]
+            $target = ArrayToString @($singleHost,$busID)
+        }
+        "Unmount" {
+            $command = $optionArray[1]
+            if ($Ports) {
+                $target = ArrayToString $Ports
+            } else {
+                $target = "*"
+            }
+        }
+        "Port" {
+            $command = $optionArray[3]
+        }
+        Default {
+            "List"
+        }
+    }
+
+    if ($internalDBG) {
+        $argPart2 = $optionArray[4]
+    }
+
+    $outArgs = ArrayToString @($command, $target, $argPart2)
+    return $outArgs
+    Write-Host $msg
+}
 
 $procName = $workingDir | Join-Path -ChildPath $fileName
 
@@ -55,6 +121,6 @@ function StartTestApp () {
     return $testOuts
 }
 
-#$testAppInfo.Arguments = '-l $hostlist'
+$testAppInfo.Arguments = ConcatArguments -internalDBG 0 -Action List
 $testAppOut = StartTestApp
 $testAppOut

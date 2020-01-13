@@ -3,7 +3,7 @@ Description=USBIPd
 
 [Service]
 ExecStart=/scripts/usbipd.sh start
-ExecStart=/scripts/usbipd.sh stop
+ExecStop=/scripts/usbipd.sh stop
 Type=oneshot
 RemainAfterExit=yes
 

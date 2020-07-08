@@ -1,5 +1,7 @@
 # ToDo list for Windows USBIP client
 ## Order
+### Create class for USBIP executable
+UsbIpExe.ps1
 ### Install Aladdin drivers (in our case)
 Тихая установка в целом поддерживается без замечаний. Установка драйвера HASP является частным случаем и не входит в общую задачу.
 ### Install USBIP driver

@@ -9,11 +9,30 @@ class UsbIpExe {
     [System.String]
     $exeName = 'usbip.exe'
 
-    # Standard output as array of strings
+    static
+    # Debug messages pattern
+    [System.Text.RegularExpressions.Regex]
+    $patternDebug = '^(usbip){1}\s+(dbg:){1}\s+'
+
+    static
+    hidden
+    # Error messages pattern
+    [System.Text.RegularExpressions.Regex]
+    $patternError = '^(usbip){1}\s+(err:){1}\s+'
+    
+    # Help message
     [System.String[]]
     $Help
 
-    # Standard error as array of strings
+    # Version as string
+    [System.String]
+    $VersionString
+
+    # Version as version
+    [System.Version]
+    $Version
+
+    # General output of the executable, excepting help message and version.
     [System.String[]]
     $Output
 
@@ -21,13 +40,13 @@ class UsbIpExe {
     [System.String[]]
     $DebugMessages
 
+    # Error messages
+    [System.String[]]
+    $ErrorMessages
+
     # Devices list
     [System.Collections.Hashtable]
     $Devices
-
-    # Debug messages pattern
-    [System.Text.RegularExpressions.Regex]
-    $patternDebug = '^(usbip){1}\s+(dbg:){1}\s+'
 
     static
     # A method that gets the fullname from default path
@@ -60,15 +79,16 @@ class UsbIpExe {
         [System.String]$fileName
     )
     {
-        [System.String]$fullName = [System.IO.Path]::Combine($folderPath, $fileName)
+        [System.String]$fullName                        = [System.IO.Path]::Combine($folderPath, $fileName)
         [System.Diagnostics.ProcessStartInfo]$startInfo = [System.Diagnostics.ProcessStartInfo]::new($fullName)
-        $startInfo.UseShellExecute        = $false
-        $startInfo.CreateNoWindow         = $true
-        $startInfo.RedirectStandardError  = $true
-        $startInfo.RedirectStandardOutput = $true
+        $startInfo.WorkingDirectory                     = $folderPath
+        $startInfo.UseShellExecute                      = $false
+        $startInfo.CreateNoWindow                       = $true
+        $startInfo.RedirectStandardError                = $true
+        $startInfo.RedirectStandardOutput               = $true
 
-        [System.Diagnostics.Process]$processObject = [System.Diagnostics.Process]::new()
-        $processObject.StartInfo = $startInfo
+        [System.Diagnostics.Process]$processObject      = [System.Diagnostics.Process]::new()
+        $processObject.StartInfo                        = $startInfo
 
         return $processObject
     }
@@ -79,20 +99,20 @@ class UsbIpExe {
         [System.IO.StreamReader]$Stream
     )
     {
-        [System.Int32]$codePageSrc = $Stream.CurrentEncoding.CodePage
-        [System.Int32]$codePageOut = [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage
-        [System.Text.Encoding]$encToRead = [System.Text.Encoding]::GetEncoding($codePageSrc)
-        [System.Text.Encoding]$encToWrite = [System.Text.Encoding]::GetEncoding($codePageOut)
+        [System.Int32]$codePageSrc          = $Stream.CurrentEncoding.CodePage
+        [System.Int32]$codePageOut          = [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage
+        [System.Text.Encoding]$encToRead    = [System.Text.Encoding]::GetEncoding($codePageSrc)
+        [System.Text.Encoding]$encToWrite   = [System.Text.Encoding]::GetEncoding($codePageOut)
 
-        [System.String[]]$stringsOut = @()
+        [System.String[]]$stringsOut        = @()
 
         while (
             -not ($Stream.EndOfStream)
         )
         {
-            [System.String]$strRaw = $Stream.ReadLine()
-            [System.Byte[]]$bytesRaw = $encToRead.GetBytes($strRaw)
-            [System.String]$strConv = $encToWrite.GetString($bytesRaw)
+            [System.String]$strRaw      = $Stream.ReadLine()
+            [System.Byte[]]$bytesRaw    = $encToRead.GetBytes($strRaw)
+            [System.String]$strConv     = $encToWrite.GetString($bytesRaw)
             if (
                 (-not [System.String]::IsNullOrEmpty($strConv)) -and `
                 (-not [System.String]::IsNullOrWhiteSpace($strConv))
@@ -105,6 +125,7 @@ class UsbIpExe {
         return $stringsOut
     }
 
+    # A method that parses the output strings
     static
     [System.String[]]
     ParseOutput(
@@ -122,41 +143,75 @@ class UsbIpExe {
         return $stringsTrimmed
     }
 
-    # A method that starts the USBIP executable and fills the 'Output' and 'Help' properties
-    [void]
+    # A method that starts the USBIP executable
+    [System.String[]]
     StartProcess(
         [System.String]$Arguments
     )
     {
-        #[System.String]$fullName = $this::GetFullName($this::BaseName)
-        
         [System.Diagnostics.Process]$processObject = $this::CreateProcess($this::workFolder, $this::exeName)
-        $processObject.StartInfo.WorkingDirectory = $this::workFolder
         $processObject.StartInfo.Arguments = $Arguments
         $processObject.Start()
-        [System.String[]]$OutputRaw = $this::ReadOutputStream($processObject.StandardError)
-        [System.String[]]$HelpRaw = $this::ReadOutputStream($processObject.StandardOutput)
-        $this.Output = $OutputRaw
-        $this.Help = $HelpRaw
-        $this.DebugMessages = $this::ParseOutput($OutputRaw, $this.patternDebug)
+        [System.String[]]$outputMain = $this::ReadOutputStream($processObject.StandardError)
+        [System.String[]]$outputVersionAndHelp = $this::ReadOutputStream($processObject.StandardOutput)
+
+        if      ($Arguments -eq '-h')
+        {
+            $this.Help = $outputVersionAndHelp
+            return $outputVersionAndHelp
+        }
+        elseif  ($Arguments -eq '-v')
+        {
+            $this.VersionString = $outputVersionAndHelp[0]
+            $this.Version = $outputVersionAndHelp[0] -replace '[^0-9.]'
+            return $outputVersionAndHelp
+        }
+        else
+        {
+            return $outputMain
+        }
     }
 
     # Method: just get help
-    [void]
+    [System.String[]]
     GetHelp()
     {
-        $this.StartProcess('-h')
+        return $this.StartProcess('-h')
+    }
+
+    [System.String]
+    GetVersion()
+    {
+        return $this.StartProcess('-v')
     }
 
     # Method: list devices on the remote host(s)
-    [void]
+    [System.String[]]
     List(
         [System.String[]]$hostsList
     )
     {
-        [System.String]$hostString = [System.String]::Join(' ', $hostsList)
-        [System.String]$argumentString = "-l $hostString -D"
-        $this.StartProcess($argumentString)
+        [System.String]$hostString      = [System.String]::Join(' ', $hostsList)
+        [System.String]$argumentString  = "-l $hostString -D"
+        [System.String[]]$devicesInfo   = $this.StartProcess($argumentString)
+        #return $devicesInfo
+        return $this.ParseDevices($devicesInfo)
+    }
+
+    #[System.Collections.Hashtable]
+    [string[]]
+    ParseDevices(
+        [System.String[]]$listOutput
+    )
+    {
+        #[System.Collections.Hashtable]$tableOut = @{}
+        [System.String[]]$listCleaned = $listOutput.Where({
+            (-not [regex]::IsMatch($_, $this::patternError)) -and `
+            (-not [regex]::IsMatch($_, $this::patternDebug))
+        })
+
+        #return $tableOut
+        return $listCleaned
     }
 
     UsbIpExe()
@@ -181,43 +236,6 @@ class UsbIpExe {
     }
 }
 
-function Get-UsbIds {
-    [CmdletBinding()]
-    param(
-        [uri]
-        $locationDefault = 'http://www.linux-usb.org/usb.ids',
-
-        [string]
-        $locationOnfileSystem
-    )
-    [string]$myName = "$($MyInvocation.MyCommand.Name):"
-    Write-Verbose "$myName Get current location"
-    [string]$locationCurrent = [System.IO.Directory]::GetCurrentDirectory()
-    Write-Verbose "Current location is: $locationCurrent"
-
-    Write-Verbose "$myName Search file usb.ids"
-    [string]$filePath = "$($locationCurrent)\usb.ids"
-    if (
-        [System.IO.File]::Exists($filePath)
-    )
-    {
-        Write-Verbose "$myName Exists: $filePath"
-        return
-    }
-
-    Write-Verbose "$myName Trying to download file"
-    $webClient = [System.Net.WebClient]::new()
-    try {
-        $webClient.DownloadFile($locationDefault, $filePath)
-        Write-Verbose -Message "$myName The file was downloaded from $locationDefault to $filePath"
-        return
-    }
-    catch {
-        Write-Warning $_.Exception.Message
-        return
-    }
-}
-
 function TestMe {
     [CmdletBinding()]
     param ()
@@ -225,27 +243,26 @@ function TestMe {
     Write-Verbose "$myName Create an object"
     $usbIPObj = [UsbIpExe]::new('C:\usbip')
 
-    Write-Verbose "$myName Start process"
-    #$usbIPObj.StartProcess('-l usboip')
+    Write-Verbose "$myName Start process and get help"
+    #$usbIPObj.GetHelp()
+    Write-Verbose "$myName Reading help from properties"
+    #$usbIPObj.Help
 
-    Write-Verbose "$myName Get help"
-    $usbIPObj.GetHelp()
-    $usbIPObj.Help
-
-    Write-Verbose "$myName List devices"
+    Write-Verbose "$myName Get version string"
+    #$usbIPObj.GetVersion()
+    Write-Verbose "$myName Reading version from properties"
+    #$usbIPObj.VersionString
+    #$usbIPObj.Version
+    
     [string[]]$hostList = @(
         'usboip'
-        'demo-srv00'
-        'centos7gen2'
+    #    'demo-srv00'
+    #    'centos7gen2'
     )
-    $usbIPObj.List($hostList)
 
-    Write-Verbose "$myName StdErr"
-    $usbIPObj.Output
-    
-    Write-Verbose "$myName Debug"
-    $usbIPObj.DebugMessages
+    Write-Verbose "$myName Trying to get info about hosts: $hostList"
+    $usbIPObj.List($hostList)
 }
 
-#Get-UsbIds -Verbose
-TestMe -Verbose
+#[string[]]$devOut = TestMe -Verbose
+#$devOut

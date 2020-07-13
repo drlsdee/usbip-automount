@@ -1,3 +1,54 @@
+class UsbRemoteInfo {
+    # Device Bus ID
+    [string]
+    $BusID
+
+    # Device vendor name
+    [string]
+    $VendorName
+
+    # Device vendor ID (PID)
+    [string]
+    $VendorID
+
+    # Device name
+    [string]
+    $DeviceName
+
+    # Device ID (PID)
+    [string]
+    $ProductID
+
+    # Device remote address
+    [string]
+    $RemoteAddress
+
+    [void]
+    FillProperties(
+        [string[]]$devicePropertyStrings
+    )
+    {
+        [string[]]$deviceInfoGeneral    = $devicePropertyStrings[0].Split(':()').Where({$_}).TrimStart(' ').TrimEnd(' ')
+        $this.BusID = $deviceInfoGeneral[0]
+        $this.VendorName = $deviceInfoGeneral[1]
+        $this.DeviceName = $deviceInfoGeneral[2]
+        $this.VendorID = $deviceInfoGeneral[3]
+        $this.ProductID = $deviceInfoGeneral[4]
+
+        [string]$deviceRemoteAddress    = $devicePropertyStrings[1].TrimStart(': ')
+        $this.RemoteAddress = $deviceRemoteAddress
+        #[string]$deviceClassString0     = $devicePropertyStrings[2].TrimStart(': ')
+        #[string]$deviceClassString1     = $devicePropertyStrings[3].TrimStart(': ')
+    }
+
+    UsbRemoteInfo(
+        [string[]]$deviceInfoRaw
+    )
+    {
+        $this.FillProperties($deviceInfoRaw)
+    }
+}
+
 class UsbIpExe {
     static
     # Path to the folder where the 'usbip.exe' is placed
@@ -74,7 +125,8 @@ class UsbIpExe {
 
     static
     # A method that creates the process object
-    [System.Diagnostics.Process]CreateProcess(
+    [System.Diagnostics.Process]
+    CreateProcess(
         [System.String]$folderPath,
         [System.String]$fileName
     )
@@ -95,7 +147,8 @@ class UsbIpExe {
 
     static
     # A method that reads the output stream
-    [System.String[]]ReadOutputStream(
+    [System.String[]]
+    ReadOutputStream(
         [System.IO.StreamReader]$Stream
     )
     {
@@ -185,33 +238,55 @@ class UsbIpExe {
         return $this.StartProcess('-v')
     }
 
-    # Method: list devices on the remote host(s)
-    [System.String[]]
+    # Method: list devices on the remote host
+    [System.Management.Automation.PSObject]
     List(
-        [System.String[]]$hostsList
+        [System.String]$remoteHostName
     )
     {
-        [System.String]$hostString      = [System.String]::Join(' ', $hostsList)
-        [System.String]$argumentString  = "-l $hostString -D"
-        [System.String[]]$devicesInfo   = $this.StartProcess($argumentString)
-        #return $devicesInfo
-        return $this.ParseDevices($devicesInfo)
-    }
+        [System.Text.RegularExpressions.Regex]$hostNamePattern = "- $($remoteHostName)$"
+        [System.String]$argumentString  = "-l $remoteHostName -D"
+        [System.String[]]$devicesInfoRaw   = $this.StartProcess($argumentString).Where({
+            -not $hostNamePattern.IsMatch($_)
+        })
 
-    #[System.Collections.Hashtable]
-    [string[]]
-    ParseDevices(
-        [System.String[]]$listOutput
-    )
-    {
-        #[System.Collections.Hashtable]$tableOut = @{}
-        [System.String[]]$listCleaned = $listOutput.Where({
+        [System.Management.Automation.PSObject]$devicesList = [System.Management.Automation.PSObject]::new(@{
+            hostName = $remoteHostName
+            outputRaw = $devicesInfoRaw
+            errorMsg = [System.String[]]@()
+            devices = [UsbRemoteInfo[]]@()
+        })
+
+        [System.String[]]$devicesErrorMessages = $devicesInfoRaw.Where({
+            [regex]::IsMatch($_, $this::patternError)
+        })
+
+        [System.String[]]$devicesDebugMessages = $devicesInfoRaw.Where({
+            [regex]::IsMatch($_, $this::patternError) -or `
+            [regex]::IsMatch($_, $this::patternDebug)
+        })
+
+        [System.String[]]$devicesInfoMessages = $devicesInfoRaw.Where({
             (-not [regex]::IsMatch($_, $this::patternError)) -and `
             (-not [regex]::IsMatch($_, $this::patternDebug))
         })
 
-        #return $tableOut
-        return $listCleaned
+        if ($devicesErrorMessages) {
+            $devicesList.errorMsg = $devicesDebugMessages
+        }
+        else {
+            $indexStart = 0
+            $indexEnd = $indexStart + 3
+
+            do {
+                [string[]]$deviceCurrent = $devicesInfoMessages[($indexStart)..($indexEnd)]
+                $devicesList.devices += [UsbRemoteInfo]::new($deviceCurrent)
+                $indexStart = $indexStart + 4
+                $indexEnd = $indexStart + 3
+            } while ($indexEnd -lt $devicesInfoMessages.Count)
+        }
+        
+        return $devicesList
     }
 
     UsbIpExe()
@@ -257,12 +332,17 @@ function TestMe {
     [string[]]$hostList = @(
         'usboip'
     #    'demo-srv00'
-    #    'centos7gen2'
+        'centos7gen2'
     )
 
     Write-Verbose "$myName Trying to get info about hosts: $hostList"
-    $usbIPObj.List($hostList)
+    $hostCurr = $hostList[0]
+    #$usbResult = $usbIPObj.List($hostCurr)
+    $usbResult = $hostList.ForEach({
+        $usbIPObj.List($_)
+    })
+    $usbResult
 }
 
-#[string[]]$devOut = TestMe -Verbose
-#$devOut
+$tmpResult = TestMe -Verbose
+$tmpResult[0]#.Where({$_.errorMsg})

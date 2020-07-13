@@ -289,6 +289,47 @@ class UsbIpExe {
         return $devicesList
     }
 
+    [System.String[]]
+    Mount(
+        [System.String]$remoteHostName,
+        [System.String]$BusID
+    )
+    {
+        [System.String]$Arguments = "-a $remoteHostName $BusID -D"
+        [System.String[]]$attachResultRaw = $this.StartProcess($Arguments)
+        [System.String[]]$attachResultErr = $attachResultRaw.Where({
+            [regex]::IsMatch($_, $this::patternError)
+        })
+        if ($attachResultErr) {
+            return @(
+                "Failed to mount device with bus ID $($BusID) from the host $($remoteHostName)! Raw output below:"
+                $attachResultRaw
+            )
+        }
+        else {
+            return "Mounted device with bus ID $($BusID) from the host $($remoteHostName)"
+        }
+    }
+
+    [System.String[]]
+    UnmountAll()
+    {
+        [System.String]$Arguments = '-d * -D'
+        [System.String[]]$unmountResultRaw = $this.StartProcess($Arguments)
+        [System.String[]]$unmountResultErr = $unmountResultRaw.Where({
+            [regex]::IsMatch($_, $this::patternError)
+        })
+        if ($unmountResultErr) {
+            return @(
+                "Failed to unmount devices! Raw output below:"
+                $unmountResultRaw
+            )
+        }
+        else {
+            return "Devices unmounted successfully!"
+        }
+    }
+
     UsbIpExe()
     {
         $this::workFolder = $this::GetFullNameFromEnvPath($this::exeName)
@@ -319,7 +360,7 @@ function TestMe {
     $usbIPObj = [UsbIpExe]::new('C:\usbip')
 
     Write-Verbose "$myName Start process and get help"
-    #$usbIPObj.GetHelp()
+    $usbIPObj.GetHelp()
     Write-Verbose "$myName Reading help from properties"
     #$usbIPObj.Help
 
@@ -337,12 +378,13 @@ function TestMe {
 
     Write-Verbose "$myName Trying to get info about hosts: $hostList"
     $hostCurr = $hostList[0]
-    #$usbResult = $usbIPObj.List($hostCurr)
-    $usbResult = $hostList.ForEach({
-        $usbIPObj.List($_)
-    })
-    $usbResult
+    $usbResult = $usbIPObj.List($hostCurr)
+    #$usbResult = $hostList.ForEach({$usbIPObj.List($_)})
+    #$usbResult.devices.BusID
+
+    $usbIPObj.Mount($hostList[0], $usbResult.devices.BusID)
+
 }
 
 $tmpResult = TestMe -Verbose
-$tmpResult[0]#.Where({$_.errorMsg})
+$tmpResult

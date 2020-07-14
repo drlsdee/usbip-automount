@@ -2,28 +2,30 @@
 ## Order
 ### Create class for USBIP executable
 UsbIpExe.ps1
-### Install Aladdin drivers (in our case)
-Тихая установка в целом поддерживается без замечаний. Установка драйвера HASP является частным случаем и не входит в общую задачу.
 ### Install USBIP driver
-#### Сертификат, которым подписан драйвер, по умолчанию не находится в хранилище доверенных издателей.
-##### Возможные варианты решения:
-Рекомендация предварительно распространить сертификат средствами GPO. Выходит за рамки задачи.
-Извлечение и установка сертификата в соответствующее хранилище консольными утилитами.
-#### Тихая установка драйвера
-Отложено.
+#### The certificate that the USBIP driver is signed with is usually not in the 'TrustedPublisher' certificate store.
+##### Possible solutions:
+1.  Create a GPO object. That is beyond our scope.
+1.  Extract the certificate chain and import it to the 'TrustedPublisher' store of the 'LocalMachine' scope:
+    1.  with GUI;
+    1.  with cmdline utils;
+    1.  with PowerShell functions, cmdlets and modules. The last may be included in the our tasklist later.
+#### Silent driver installation
+Postponed. Depends on the previous task.
 ## TODO
-### Мониторинг подключенных устройств в скрипте Windows PoSh
-#### Перенаправление событий в журнал Windows Event Log предпочтительнее текстового журнала, т.к.
-  - уменьшает количество кода (?)
-  - задействует штатные функции вместо необходимости изобретать велосипед
-  - позволит в будущем централизованно собирать события
-### Реакция на события
-  - Устройство отключено (проверка доступности хоста)
-  - Хост недоступен (попытка разбудить)
-  - Хост доступен, но устройств нет (сообщение, запуск службы, перезапуск службы)
-  - Выключение/перезагрузка клиента (отмонтирование устройств)
-  - Саспенд клиента (отмонтирование устройств)  
-  */ Поскольку более вероятным сценарием здесь является саспенд виртуальной машины, постольку отслеживать события следует, возможно, на гипервизоре/системе управления гипервизором/системе мониторинга. В этом случае перезапуск службы должен делаться третьим узлом на сервере USBIP./*
-  
-  - Перезапуск публикации отдельного устройства.  
-  */ Для сценариев, где с одного сервера опубликовано несколько устройств для разных клиентов. Нужно заметить, что для Aladdin HASP, для которого все и затевалось, во всяком случае, для ключей 1С невозможно присутствие двух одинаковых ключей на одном хосте./*
+*   Add the function to use class 'UsbIpExe'
+*   Add logging to the text file
+*   Convert into the PowerShell module
+*   Pass events to the Windows EventLog
+*   Monitor state of mounted devices
+*   ADD RESPONSE TO CLIENT SHUTDOWN OR REBOOT EVENTS! (Just unmount all monuted devices)
+*   Additional functions:
+    *   Check host availability
+    *   Wake-On-Lan if the host exists but probably down
+    *   Check usbipd service status on the remote host, start if down
+    *   Restart the usbipd service on the remote host if the device was unmounted incorrectly and the service was hanged up.
+    *   Unmount devices before the client's VM will suspended by hypervisor engine.
+        *   Poll the hypervisor, e.g. SCVMM?
+        *   Poll the monitoring engine (SCOM, Zabbix, Prom and whatever you want)?
+    *   Re-publish single device (I suspect it should be on the USBIP server, i.e. it is not Windows-task)
+ 

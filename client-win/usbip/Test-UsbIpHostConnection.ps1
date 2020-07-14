@@ -57,9 +57,7 @@ function Test-UsbIpHostConnection {
     if ($resolveResult.HostName -in $addressStrings) {
         Write-Warning -Message "$myName The $hostNoun `"$stringToResolve`" probably either is not used by any of the known hosts or is not registered in the known DNS zones. Continue anyway."
     }
-
-    [System.Net.IPEndPoint]$ipEndpoint = [System.Net.IPEndPoint]::new($resolveResult.AddressList[0], $Port)
-    
+  
     if ($resolveResult.Aliases) {
         Write-Verbose -Message "$myName Set target hostname to alias: $($resolveResult.Aliases[0])"
         [string]$hostNameForTest = $resolveResult.Aliases[0]

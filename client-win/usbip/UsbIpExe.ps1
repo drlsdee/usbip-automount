@@ -178,25 +178,60 @@ class UsbIpExe {
         return $stringsOut
     }
 
-    # A method that parses the output strings
+    # Method: The method reads the raw output and returns either raw output
+    # (if error messages have appeared) or comment on successful action.
     static
     [System.String[]]
-    ParseOutput(
-        [System.String[]]$inputStrings,
-        [System.Text.RegularExpressions.Regex]$pattern
+    FilterErrors(
+        [System.String[]]$outputRaw,
+        [System.String]$commentSuccess,
+        [System.String]$commentError
     )
     {
-        [System.String[]]$stringsFiltered = $inputStrings.Where({
-            $pattern.IsMatch($_)
+        [System.String[]]$outputErr = $outputRaw.Where({
+            $this::patternError.IsMatch($_)
         })
 
-        [System.String[]]$stringsTrimmed = $stringsFiltered.ForEach({
-            $pattern.Replace($_, '')
-        })
-        return $stringsTrimmed
+        if ($outputErr.Count -gt 0)
+        {
+            [System.String[]]$stringsToOut = @(
+                $commentError,
+                'See raw output below:'
+                $outputRaw
+            )
+        }
+        else
+        {
+            [System.String[]]$stringsToOut = @(
+                $commentSuccess
+            )
+        }
+        return $stringsToOut
     }
 
-    # A method that starts the USBIP executable
+    # Method: The method splits the raw output
+    # of the USBIP command 'usbip <-l | --list> [hostname] into 4-line blocks
+    # and then creates an object of type [UsbRemoteInfo] from each of the blocks.
+    static
+    [System.Management.Automation.PSObject]
+    GetDeviceInfo(
+        [System.String[]]$outputClean
+    )
+    {
+        [System.Int32]$indexStart = 0
+        [System.Int32]$indexEnd = 3
+        [System.Int32]$blockSize = 4
+        [UsbRemoteInfo[]]$devicesList = @()
+        while ($indexEnd -lt $outputClean.Count) {
+            [System.String[]]$blockToParse = $outputClean[($indexStart)..($indexEnd)]
+            $devicesList += [UsbRemoteInfo]::new($blockToParse)
+            $indexStart = $indexStart + $blockSize
+            $indexEnd = $indexEnd + $blockSize
+        }
+        return $devicesList
+    }
+
+    # Method: the method starts the USBIP executable with an argument string.
     [System.String[]]
     StartProcess(
         [System.String]$Arguments
@@ -244,7 +279,7 @@ class UsbIpExe {
         [System.String]$remoteHostName
     )
     {
-        [System.Text.RegularExpressions.Regex]$hostNamePattern = "- $($remoteHostName)$"
+        [System.Text.RegularExpressions.Regex]$hostNamePattern = "^- $($remoteHostName)$"
         [System.String]$argumentString  = "-l $remoteHostName -D"
         [System.String[]]$devicesInfoRaw   = $this.StartProcess($argumentString).Where({
             -not $hostNamePattern.IsMatch($_)
@@ -258,32 +293,19 @@ class UsbIpExe {
         })
 
         [System.String[]]$devicesErrorMessages = $devicesInfoRaw.Where({
-            [regex]::IsMatch($_, $this::patternError)
-        })
-
-        [System.String[]]$devicesDebugMessages = $devicesInfoRaw.Where({
-            [regex]::IsMatch($_, $this::patternError) -or `
-            [regex]::IsMatch($_, $this::patternDebug)
+            $this::patternError.IsMatch($_)
         })
 
         [System.String[]]$devicesInfoMessages = $devicesInfoRaw.Where({
-            (-not [regex]::IsMatch($_, $this::patternError)) -and `
-            (-not [regex]::IsMatch($_, $this::patternDebug))
+            (-not $this::patternError.IsMatch($_)) -and `
+            (-not $this::patternDebug.IsMatch($_))
         })
 
         if ($devicesErrorMessages) {
-            $devicesList.errorMsg = $devicesDebugMessages
+            $devicesList.errorMsg = $devicesErrorMessages
         }
         else {
-            $indexStart = 0
-            $indexEnd = $indexStart + 3
-
-            do {
-                [string[]]$deviceCurrent = $devicesInfoMessages[($indexStart)..($indexEnd)]
-                $devicesList.devices += [UsbRemoteInfo]::new($deviceCurrent)
-                $indexStart = $indexStart + 4
-                $indexEnd = $indexStart + 3
-            } while ($indexEnd -lt $devicesInfoMessages.Count)
+            $devicesList.devices = [UsbIpExe]::GetDeviceInfo($devicesInfoMessages)
         }
         
         return $devicesList
@@ -296,38 +318,32 @@ class UsbIpExe {
     )
     {
         [System.String]$Arguments = "-a $remoteHostName $BusID -D"
-        [System.String[]]$attachResultRaw = $this.StartProcess($Arguments)
-        [System.String[]]$attachResultErr = $attachResultRaw.Where({
-            [regex]::IsMatch($_, $this::patternError)
-        })
-        if ($attachResultErr) {
-            return @(
-                "Failed to mount device with bus ID $($BusID) from the host $($remoteHostName)! Raw output below:"
-                $attachResultRaw
-            )
-        }
-        else {
-            return "Mounted device with bus ID $($BusID) from the host $($remoteHostName)"
-        }
+        [System.String[]]$actionResultRaw = $this.StartProcess($Arguments)
+        [System.String]$messageSuccess = "Mounted device with bus ID $($BusID) from the host $($remoteHostName)"
+        [System.String]$messageError = "Failed to mount device with bus ID $($BusID) from the host $($remoteHostName)!"
+        return [UsbIpExe]::FilterErrors($actionResultRaw, $messageSuccess, $messageError)
     }
 
     [System.String[]]
     UnmountAll()
     {
         [System.String]$Arguments = '-d * -D'
-        [System.String[]]$unmountResultRaw = $this.StartProcess($Arguments)
-        [System.String[]]$unmountResultErr = $unmountResultRaw.Where({
-            [regex]::IsMatch($_, $this::patternError)
-        })
-        if ($unmountResultErr) {
-            return @(
-                "Failed to unmount devices! Raw output below:"
-                $unmountResultRaw
-            )
-        }
-        else {
-            return "Devices unmounted successfully!"
-        }
+        [System.String[]]$actionResultRaw = $this.StartProcess($Arguments)
+        [System.String]$messageSuccess = "Devices unmounted successfully!"
+        [System.String]$messageError = "Failed to unmount devices!"
+        return [UsbIpExe]::FilterErrors($actionResultRaw, $messageSuccess, $messageError)
+    }
+
+    [System.String[]]
+    UnmountPort(
+        [System.Int32]$Port
+    )
+    {
+        [System.String]$Arguments = "-d $Port -D"
+        [System.String[]]$actionResultRaw = $this.StartProcess($Arguments)
+        [System.String]$messageSuccess = "Device from the port $Port was unmounted successfully!"
+        [System.String]$messageError = "Failed to unmount device from port $Port!"
+        return [UsbIpExe]::FilterErrors($actionResultRaw, $messageSuccess, $messageError)
     }
 
     UsbIpExe()
@@ -380,9 +396,9 @@ function TestMe {
     $hostCurr = $hostList[0]
     $usbResult = $usbIPObj.List($hostCurr)
     #$usbResult = $hostList.ForEach({$usbIPObj.List($_)})
-    #$usbResult.devices.BusID
+    $usbResult.devices
 
-    $usbIPObj.Mount($hostList[0], $usbResult.devices.BusID)
+    #$usbIPObj.Mount($hostList[0], $usbResult.devices.BusID)
 
 }
 

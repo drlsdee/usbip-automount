@@ -351,8 +351,6 @@ class UsbIpExe {
         [System.Text.RegularExpressions.Regex]$patternPort = '^port (\d+)\: used$'
         [System.String]$Arguments = "-p"
         [System.String[]]$actionResultRaw = $this.StartProcess($Arguments)
-        [System.String]$messageSuccess = "Devices list:"
-        [System.String]$messageError = "Failed to get devices list!"
         [System.String[]]$errorList = $actionResultRaw.Where({
             $this::patternError.IsMatch($_)
         })

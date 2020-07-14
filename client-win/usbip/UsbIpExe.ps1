@@ -345,6 +345,30 @@ class UsbIpExe {
         [System.String]$messageError = "Failed to unmount device from port $Port!"
         return [UsbIpExe]::FilterErrors($actionResultRaw, $messageSuccess, $messageError)
     }
+    [System.String[]]
+    ListPorts()
+    {
+        [System.Text.RegularExpressions.Regex]$patternPort = '^port (\d+)\: used$'
+        [System.String]$Arguments = "-p"
+        [System.String[]]$actionResultRaw = $this.StartProcess($Arguments)
+        [System.String]$messageSuccess = "Devices list:"
+        [System.String]$messageError = "Failed to get devices list!"
+        [System.String[]]$errorList = $actionResultRaw.Where({
+            $this::patternError.IsMatch($_)
+        })
+        [System.String[]]$portList = $actionResultRaw.Where({
+            $patternPort.IsMatch($_)
+        })
+        if ($errorList)
+        {
+            return $errorList
+        }
+        if ($portList)
+        {
+            return $patternPort.Replace($portList, '$1')
+        }
+        return @($actionResultRaw)
+    }
 
     UsbIpExe()
     {
@@ -399,7 +423,8 @@ function TestMe {
     $usbResult.devices
 
     #$usbIPObj.Mount($hostList[0], $usbResult.devices.BusID)
-
+    Write-Verbose "$myName Getting port list"
+    $usbIPObj.ListPorts()
 }
 
 $tmpResult = TestMe -Verbose

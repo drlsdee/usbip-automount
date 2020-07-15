@@ -45,5 +45,3 @@ function Get-UsbIpCertificate {
     $trustedIssuers.Close()
     return $true
 }
-
-Get-UsbIpCertificate -Verbose -Path 'C:\usbip1'

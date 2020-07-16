@@ -71,5 +71,5 @@ function Invoke-UsbIpClient {
 
 Invoke-UsbIpClient -ScriptBlock {
     #Invoke-UsbIp -Verbose #-Path 'C:\usbip1\usbip.exe'
-    Initialize-UsbIp -Verbose -Path '\\srv-1c-00\c$\usbip'
+    Initialize-UsbIp -Verbose -Path 'C:\usbip1\' #-Version 0.2.0.1
 } -Verbose

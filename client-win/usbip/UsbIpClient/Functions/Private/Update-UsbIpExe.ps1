@@ -24,7 +24,7 @@ function Update-UsbIpExe {
     if (-not [System.IO.File]::Exists($Path))
     {
         Write-Warning -Message "$myName The file does not exists! Exiting."
-     #   return
+        return $false
     }
 
     [string]$pathToBackup = [System.IO.Path]::ChangeExtension($Path, '.bak')
@@ -45,31 +45,31 @@ function Update-UsbIpExe {
     {
         Write-Warning -Message "$myName Access is denied: $Path! Check and fix the rights for the current user: $($env:USERNAME)! Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return
+        return $false
     }
     catch
     {
         Write-Warning -Message "$myName Cannot read the file: $Path! Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return $_
+        return $false
     }
 
     if (-not $bytesFromFile) {
         Write-Warning -Message "$myName The file is empty! Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return
+        return $false
     }
 
     if ($bytesFromFile.Count -lt [System.Linq.Enumerable]::Max($addrInt32)) {
         Write-Warning -Message "$myName The file size $($bytesFromFile.Count) is less than the max address! Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return
+        return $false
     }
     
     if ($bytesFromFile.Count -lt $fileSize) {
         Write-Warning -Message "$myName The file size $($bytesFromFile.Count) is less than the expected file size $fileSize! Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return
+        return $false
     }
 
     [int[]]$addrToFix = @()
@@ -90,7 +90,7 @@ function Update-UsbIpExe {
     {
         Write-Verbose -Message "$myName Seems like the file `"$Path`" was already patched. Nothing to do. Removing the backup and exiting."
         [System.IO.File]::Delete($pathToBackup)
-        return
+        return $true
     }
 
     $addrToFix.ForEach({
@@ -104,10 +104,10 @@ function Update-UsbIpExe {
     }
     catch {
         Write-Warning -Message "$myName Cannot write the patched file! Something gone wrong. Backup should be here: $pathToBackup"
-        return
+        return $false
     }
 
     Write-Verbose -Message "$myName Removing the backup. End of the function."
     [System.IO.File]::Delete($pathToBackup)
-    return
+    return $true
 }

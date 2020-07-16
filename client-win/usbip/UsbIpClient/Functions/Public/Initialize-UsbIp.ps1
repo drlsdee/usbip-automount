@@ -13,6 +13,7 @@ function Initialize-UsbIp {
     )
     [LogStamp]$timeStamp = [LogStamp]::new([System.String]$MyInvocation.InvocationName)
     Write-Verbose -Message $timeStamp.GetStamp('Starting the function...')
+    [System.Management.Automation.ErrorRecord[]]$allErrors = @()
     <#
         Checking the following conditions:
         0.  The distributive folder contains all needed files.
@@ -45,15 +46,63 @@ function Initialize-UsbIp {
 
     [bool]$filePatchResult              = Update-UsbIpExe -Path $usbIpFilePath
 
-    switch ($true) {
-        $distResult         { "Distro exists!" }
-        $certResult         { "Certificate installed!" }
-        $drvResult          { "Drivers are present!" }
-        $pathResult         { "Executable file 'usbip.exe' found!" }
-        $filePatchResult    { "Executable file 'usbip.exe' patched!" }
-        $usbIdsResult       { "File 'usb.ids' found!" }
-        Default {}
+    switch ($false) {
+        $distResult         {
+            Write-Warning -Message $timeStamp.GetStamp("Distro does not exists!")
+        }
+        $certResult         {
+            Write-Warning -Message $timeStamp.GetStamp("Certificate is not installed!")
+            try {
+                Get-UsbIpCertificate -Path $Path -Install
+            }
+            catch {
+                Write-Verbose -Message  $timeStamp.GetStamp("Failed to install the certificate to the 'TrustedStore' location on the system `'$env:COMPUTERNAME`'!")
+                $allErrors += $_
+            }
+        }
+        $drvResult          {
+            Write-Warning -Message $timeStamp.GetStamp("Drivers are not present!")
+        }
+        $pathResult         {
+            Write-Warning -Message $timeStamp.GetStamp("Executable file 'usbip.exe' not found!")
+            <# [string]$pathSrc    = [System.IO.Path]::Combine($Path, 'usbip.exe')
+            [string]$pathDst    = [System.IO.Path]::Combine($usbIpWorkDir, 'usbip.exe')
+            try {
+                Write-Verbose -Message  $timeStamp.GetStamp("Copying the file `'$pathSrc`' to the destination `'$pathDst`'...")
+                [System.IO.File]::Copy($pathSrc, $pathDst, $true)
+            }
+            catch {
+                Write-Verbose -Message  $timeStamp.GetStamp("Failed to copy the file `'$pathSrc`' to the destination `'$pathDst`'!")
+                $allErrors += $_
+            } #>
+            Invoke-DscResource -ModuleName UsbIpFilesExists -Method Get -Property @{
+                DestinationPath = $usbIpFilePath
+                SourcePath      = [System.IO.Path]::Combine($Path, 'usbip.exe')
+                Ensure          = 'Present'
+            }
+        }
+        $filePatchResult    {
+            Write-Warning -Message $timeStamp.GetStamp("Executable file 'usbip.exe' not patched!")
+        }
+        $usbIdsResult       {
+            Write-Warning -Message $timeStamp.GetStamp("File 'usb.ids' not found!")
+            <# try {
+                Write-Verbose -Message $timeStamp.GetStamp("Downloading file 'usb.ids' to the folder `'$usbIpWorkDir`'...")
+                $usbIdsResult = Get-UsbIds -PathToUsbIp $usbIpWorkDir -Update
+            }
+            catch {
+                Write-Verbose -Message  $timeStamp.GetStamp("Failed to copy the file 'usb.ids' to the destination `'$usbIpWorkDir`'!")
+                $allErrors += $_
+            } #>
+        }
+        Default             {
+            [UsbIpExe]$usbIpExe = [UsbIpExe]::new($usbIpWorkDir)
+            $usbIpExe.StartProcess('-h')
+        }
     }
-    [UsbIpExe]$usbIpExe = [UsbIpExe]::new($usbIpWorkDir)
-    $usbIpExe.StartProcess('-h')
+
+    if ($allErrors) {
+        Write-Warning -Message $timeStamp.GetStamp("Errors were found! USBIP installation was probably failed. Returning errors and exiting.")
+        return $allErrors
+    }
 }

@@ -73,3 +73,13 @@ Invoke-UsbIpClient -ScriptBlock {
     #Invoke-UsbIp -Verbose #-Path 'C:\usbip1\usbip.exe'
     Initialize-UsbIp -Verbose -Path 'C:\usbip1\' #-Version 0.2.0.1
 } -Verbose
+@(
+    'usbip.exe'
+    'usb.ids'
+).ForEach({
+    "C:\Windows\$($_)"
+}).Where({
+    [System.IO.File]::Exists($_)
+}).ForEach({
+    Remove-Item -Path $_ -Force -Verbose
+})

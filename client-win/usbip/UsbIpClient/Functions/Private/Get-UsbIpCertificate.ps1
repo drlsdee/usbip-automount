@@ -4,7 +4,12 @@ function Get-UsbIpCertificate {
         # Path to the USBIP distributive folder
         [Parameter()]
         [string]
-        $Path
+        $Path,
+
+        # Switch to install the certificate.
+        [Parameter()]
+        [switch]
+        $Install
     )
     [string]$myName = "$($MyInvocation.MyCommand.Name):"
     Write-Verbose -Message "$myName Starting function..."
@@ -39,8 +44,12 @@ function Get-UsbIpCertificate {
         return $true
     }
 
-    Write-Verbose -Message "$myName Adding certificate to the store..."
-    $trustedIssuers.Add($certSigner)
+    if ($Install)
+    {
+        Write-Verbose -Message "$myName Adding certificate to the store..."
+        $trustedIssuers.Add($certSigner)
+    }
+
     Write-Verbose -Message "$myName Now closing the store and return."
     $trustedIssuers.Close()
     return $true

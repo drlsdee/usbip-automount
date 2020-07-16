@@ -71,7 +71,8 @@ function Invoke-UsbIpClient {
 
 Invoke-UsbIpClient -ScriptBlock {
     #Invoke-UsbIp -Verbose #-Path 'C:\usbip1\usbip.exe'
-    Initialize-UsbIp -Verbose -Path 'C:\usbip1\' #-Version 0.2.0.1
+    Get-Module -Name UsbIpClient | Select-Object *
+    #Initialize-UsbIp -Verbose -Path 'C:\usbip1\' #-Version 0.2.0.1
 } -Verbose
 @(
     'usbip.exe'

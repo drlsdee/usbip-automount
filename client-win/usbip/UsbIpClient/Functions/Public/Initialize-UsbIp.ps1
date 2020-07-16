@@ -1,5 +1,6 @@
 function Initialize-UsbIp {
     [CmdletBinding()]
+    [Alias('usbipinit', 'Install-UsbIp')]
     param (
         # Path to the USBIP distributive folder
         [Parameter()]
@@ -75,11 +76,6 @@ function Initialize-UsbIp {
                 Write-Verbose -Message  $timeStamp.GetStamp("Failed to copy the file `'$pathSrc`' to the destination `'$pathDst`'!")
                 $allErrors += $_
             } #>
-            Invoke-DscResource -ModuleName UsbIpFilesExists -Method Get -Property @{
-                DestinationPath = $usbIpFilePath
-                SourcePath      = [System.IO.Path]::Combine($Path, 'usbip.exe')
-                Ensure          = 'Present'
-            }
         }
         $filePatchResult    {
             Write-Warning -Message $timeStamp.GetStamp("Executable file 'usbip.exe' not patched!")

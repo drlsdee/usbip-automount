@@ -6,6 +6,69 @@ enum Ensure {
     Present
 }
 
+class UsbIpFileInfo {
+    # Property: The full path to the file
+    [string]
+    $FullName
+
+    # Property: The full path to the folder containing the file
+    [string]
+    $DirectoryName
+
+    # Property: The file creation date. For reference only. Does not affect the comparison result.
+    [Nullable[datetime]]
+    $CreationDate
+
+    # Property: the file SHA256 checksum.
+    [string]
+    $SHA256
+
+    # Property: the file length in bytes.
+    [int]
+    $Length
+
+    # Method: Fill the file properties
+    [void]
+    GetFileInfo(
+        [string]$filePath
+    )
+    {
+        [System.IO.FileInfo]$fileInfo   = [System.IO.FileInfo]::new($filePath)
+        $this.FullName                  = $fileInfo.FullName
+        $this.DirectoryName             = $fileInfo.DirectoryName
+        $this.Length                    = $fileInfo.Length
+        $this.CreationDate              = $fileInfo.CreationTime
+        $this.SHA256                    = (Get-FileHash -Algorithm SHA256 -Path $fileInfo.FullName).Hash
+    }
+
+    # Method: Fill the file properties with null or zeroes
+    [void]
+    GetNullInfo(
+        [string]$filePath
+    )
+    {
+        $this.FullName                  = [System.IO.Path]::GetFullPath($filePath)
+        $this.DirectoryName             = [System.IO.Path]::GetDirectoryName($filePath)
+        $this.SHA256                    = $null
+        $this.CreationDate              = $null
+        $this.Length                    = $null
+    }
+
+    # Constructor:
+    UsbIpFileInfo(
+        [string]$filePath
+    )
+    {
+        if ([System.IO.File]::Exists($filePath))
+        {
+            $this.GetFileInfo($filePath)
+        }
+        else {
+            $this.GetNullInfo($filePath)
+        }
+    }
+}
+
 [DscResource()]
 class DscUsbIds {
     # A path to destination folder.
@@ -26,6 +89,10 @@ class DscUsbIds {
     [DscProperty(NotConfigurable)]
     [string] $CheckSum
 
+    # Full path to the destination file
+    [DscProperty(NotConfigurable)]
+    [string] $DestinationFile
+
     # Source URI (default is 'http://www.linux-usb.org/usb.ids')
     [DscProperty()]
     [string] $SourceUri = 'http://www.linux-usb.org/usb.ids'
@@ -34,35 +101,55 @@ class DscUsbIds {
     [DscProperty()]
     [string] $SourcePath
 
+    # Just a filename.
+    [DscProperty(NotConfigurable)]
+    [string] $FileName = 'usb.ids'
+
+    # A method returns either source file path (if given in params) or a temporary downloaded file path
+    [string]
+    SelectPath()
+    {
+        if ($this.SourcePath) {
+            [string]$pathToReturn = $this.ResolvePath($this.SourcePath)
+        }
+        else {
+            [string]$pathToReturn = $this.DownloadTemp($this.SourceUri)
+        }
+        return $pathToReturn
+    }
+
     # A method resolves folder path to file path
     [string]
     ResolvePath(
         [string]$srcPath
     )
     {
-        [string]$srcPath = [System.IO.Path]::GetFullPath($srcPath)
-        [string]$fileBaseName = 'usb'
-        [string]$fileExt = 'ids'
-        [string]$fileName = "$($fileBaseName).$($fileExt)"
+        [string]$srcPath        = [System.IO.Path]::GetFullPath($srcPath)
+        [string]$fileBaseName   = [System.IO.Path]::GetFileNameWithoutExtension($this.FileName)
+        [string]$fileExt        = [System.IO.Path]::GetExtension($this.FileName)
         
         if
-        ([System.IO.Path]::GetFileName($srcPath) -eq $fileName)
+        ([System.IO.Path]::GetFileName($srcPath) -eq $this.FileName)
         {
             [string]$pathResult = $srcPath
         }
         elseif
         (
-            [System.IO.Path]::GetFileNameWithoutExtension($srcPath) -eq [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+            [System.IO.Path]::GetFileNameWithoutExtension($srcPath) -eq $fileBaseName
         )
         {
             [string]$pathResult = [System.IO.Path]::ChangeExtension($srcPath, $fileExt)
         }
-        elseif ([System.IO.File]::Exists($srcPath)) {
+        elseif
+        (
+            [System.IO.File]::Exists($srcPath)
+        )
+        {
             [string]$folderName = [System.IO.Path]::GetDirectoryName($srcPath)
-            [string]$pathResult = [System.IO.Path]::Combine($folderName, $fileName)
+            [string]$pathResult = [System.IO.Path]::Combine($folderName, $this.FileName)
         }
         else {
-            [string]$pathResult = [System.IO.Path]::Combine($srcPath, $fileName)
+            [string]$pathResult = [System.IO.Path]::Combine($srcPath, $this.FileName)
         }
 
         return $pathResult
@@ -75,8 +162,12 @@ class DscUsbIds {
         [string]$pathDst
     )
     {
-        [string]$folderPath = [System.IO.Path]::GetDirectoryName($pathDst)
-        if (-not [System.IO.Directory]::Exists($folderPath)) {
+        [string]$folderPath     = [System.IO.Path]::GetDirectoryName($pathDst)
+        if
+        (
+            -not [System.IO.Directory]::Exists($folderPath)
+        )
+        {
             [System.IO.Directory]::CreateDirectory($folderPath)
         }
         [System.IO.File]::Copy($pathSrc, $pathDst, $true)
@@ -88,7 +179,11 @@ class DscUsbIds {
     )
     {
         # Removing the file if exists
-        if ([System.IO.File]::Exists($pathToRemove)) {
+        if
+        (
+            [System.IO.File]::Exists($pathToRemove)
+        )
+        {
             [System.IO.File]::Delete($pathToRemove)
         }
 
@@ -99,21 +194,21 @@ class DscUsbIds {
         if ([System.IO.Directory]::Exists($dirToRemove)) {
 
             # Check if the folder is empty
-            [string[]]$dirContent = [System.IO.Directory]::GetFileSystemEntries($dirToRemove)
-            [bool]$dirEmpty = ($dirContent.Count -eq 0)
+            [string[]]$dirContent           = [System.IO.Directory]::GetFileSystemEntries($dirToRemove)
+            [bool]$dirEmpty                 = ($dirContent.Count -eq 0)
 
             do {
                 # Check if the folder is empty
-                [string[]]$dirContent = [System.IO.Directory]::GetFileSystemEntries($dirToRemove)
-                [bool]$dirEmpty = ($dirContent.Count -eq 0)
+                [string[]]$dirContent       = [System.IO.Directory]::GetFileSystemEntries($dirToRemove)
+                [bool]$dirEmpty             = ($dirContent.Count -eq 0)
                 
                 if ($dirEmpty) {
                     # Get parent
-                    [string]$dirNameParent = [System.IO.Path]::GetDirectoryName($dirToRemove)
+                    [string]$dirNameParent  = [System.IO.Path]::GetDirectoryName($dirToRemove)
                     # Removing the current directory
                     [System.IO.Directory]::Delete($dirToRemove)
                     # Switch to the parent
-                    $dirToRemove = $dirNameParent
+                    $dirToRemove            = $dirNameParent
                 }
             } while ($dirEmpty)
         }
@@ -126,7 +221,7 @@ class DscUsbIds {
     )
     {
         [string]$tempFolder                 = [System.IO.Path]::GetTempPath()
-        [string]$tempPath                   = [System.IO.Path]::Combine($tempFolder, 'usb.ids')
+        [string]$tempPath                   = [System.IO.Path]::Combine($tempFolder, $this.FileName)
         [System.Net.WebClient]$webClient    = [System.Net.WebClient]::new()
         $webClient.DownloadFile($srcUri, $tempPath)
         return $tempPath
@@ -136,44 +231,22 @@ class DscUsbIds {
     CompareFiles()
     {
         # Getting the source file
-        if ($this.SourcePath)
-        {
-            #[string]$sourceFilePath = $this.SourcePath
-            [string]$sourceFilePath = $this.ResolvePath($this.SourcePath)
-        }
-        else {
-            [string]$sourceFilePath = $this.DownloadTemp($this.SourceUri)
-        }
-
-        # Getting the source file hash
-        if ([System.IO.File]::Exists($sourceFilePath)) {
-            [string]$srcFileHash    = (Get-FileHash -Path $sourceFilePath -Algorithm SHA256).Hash
-        }
-        else {
-            [string]$srcFileHash    = $null
-        }
-
-        # Checking if the destination file exists
-        #[string]$destFilePath       = [System.IO.Path]::Combine($this.DestinationFolder, 'usb.ids')
+        [string]$sourceFilePath     = $this.SelectPath()
         [string]$destFilePath       = $this.ResolvePath($this.DestinationFolder)
-        if ([System.IO.File]::Exists($destFilePath)) {
-            [bool]$destFileExists   = $true
-            [string]$destFileHash   = (Get-FileHash -Path $destFilePath -Algorithm SHA256).Hash
-            [Nullable[datetime]]$destFileDate = [System.IO.File]::GetCreationTime($destFilePath)
-        }
-        else {
-            [bool]$destFileExists   = $false
-            [string]$destFileHash   = $null
-            [Nullable[datetime]]$destFileDate = $null
-        }
 
-        # Comparing hashes
-        if  ( ($null -eq $srcFileHash) -and ($null -eq $destFileHash) )
+        [UsbIpFileInfo]$fileInfoSource = [UsbIpFileInfo]::new($sourceFilePath)
+        [UsbIpFileInfo]$fileInfoDest = [UsbIpFileInfo]::new($destFilePath)
+
+        if
+        (
+            ($null -eq $fileInfoSource.SHA256) -and `
+            ($null -eq $fileInfoDest.SHA256)
+        )
         {
             [bool]$filesAreEqual    = $false
         }
         else {
-            [bool]$filesAreEqual    = ($srcFileHash -eq $destFileHash)
+            [bool]$filesAreEqual    = $fileInfoDest.SHA256 -eq $fileInfoSource.SHA256
         }
 
         # Getting ensure state
@@ -190,8 +263,8 @@ class DscUsbIds {
             ResourceState           = $fileState
             Source                  = $sourceFilePath
             Destination             = $destFilePath
-            CreationDate            = $destFileDate
-            CheckSum                = $destFileHash
+            CreationDate            = $fileInfoDest.CreationDate
+            CheckSum                = $fileInfoDest.SHA256
         }
         return $compareResult
     }
@@ -205,6 +278,7 @@ class DscUsbIds {
         $this.CreationDate          = $compareResult.CreationDate
         $this.CheckSum              = $compareResult.CheckSum
         $this.SourcePath            = $compareResult.Source
+        $this.DestinationFile       = $compareResult.Destination
         # Return this instance or construct a new instance.
         return $this
     }

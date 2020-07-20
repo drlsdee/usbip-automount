@@ -22,33 +22,7 @@ if ($classesList) {
         }
     })
 }
-<# 
-[string]$psDscResourcesFolderPath = "$PSScriptRoot\DscResources"
-if ([System.IO.Directory]::Exists($psDscResourcesFolderPath)) {
-    [string[]]$psDscResourcesList = [System.IO.Directory]::EnumerateFiles($psDscResourcesFolderPath, '*.psm1', 'AllDirectories')
-}
 
-if ($psDscResourcesList) {
-    Write-Verbose -Message "Found $($psDscResourcesList.Count) script(s) containing custom PowerShell DSC resources. Importing..."
-    $psDscResourcesList.ForEach({
-        [string]$psDscResourceFullName = $_
-        [string]$psDscResourceBaseName = [System.IO.Path]::GetFileNameWithoutExtension($_)
-        try {
-            #. $psDscResourceFullName
-            Import-Module -Name $psDscResourceFullName
-        }
-        catch [System.Management.Automation.CommandNotFoundException]
-        {
-            Write-Warning -Message "The DSC resource `"$psDscResourceBaseName`" is invalid! Skipping."
-        }
-        catch # All other errors
-        {
-            Write-Warning -Message "Cannot import the DSC resource `"$($psDscResourceBaseName)`"!"
-            $_
-        }
-    })
-}
- #>
 [string]$functionsFolderPath = "$PSScriptRoot\Functions"
 [string]$functionsFolderPathPrivate = "$functionsFolderPath\Private"
 [string]$functionsFolderPathPublic = "$functionsFolderPath\Public"

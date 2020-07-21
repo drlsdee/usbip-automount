@@ -1,4 +1,4 @@
-function Invoke-DscUsbIds {
+function Invoke-UsbIds {
     [CmdletBinding()]
     param (
         # Source path
@@ -64,36 +64,36 @@ function Invoke-DscUsbIds {
         Import-Module -Name $_ -Force
     })
 
-    Write-Verbose -Message "$myName Creating an object of type [DscUsbIds]..."
-    [DscUsbIds]$dscUsbIds = [DscUsbIds]::new()
+    Write-Verbose -Message "$myName Creating an object of type [UsbIds]..."
+    [UsbIds]$UsbIds = [UsbIds]::new()
     if ($Path) {
         Write-Verbose -Message "$myName Source path: $Path"
-        $dscUsbIds.SourcePath = $Path
+        $UsbIds.SourcePath = $Path
     }
     else {
         Write-Verbose -Message "$myName Source URI: $Uri"
-        $dscUsbIds.SourceUri = $Uri
+        $UsbIds.SourceUri = $Uri
     }
 
     Write-Verbose -Message "$myName Destination folder: $Destination"
-    $dscUsbIds.DestinationFolder = $Destination
+    $UsbIds.DestinationFolder = $Destination
     Write-Verbose -Message "$myName Desired state: $Ensure"
-    $dscUsbIds.Ensure = $Ensure
+    $UsbIds.Ensure = $Ensure
 
     Write-Verbose -Message "$myName Calling the method: $Method"
     switch ($Method) {
         'Get'   {
-            $dscUsbIds.Get()
+            $UsbIds.Get()
         }
         'Set'   {
-            $dscUsbIds.Set()
+            $UsbIds.Set()
         }
         'Test'  {
-            $dscUsbIds.Test()
+            $UsbIds.Test()
         }
         Default {
             Write-Verbose -Message "$myName Method was not defined. Calling the method `'Get()`'..."
-            $dscUsbIds.Get()
+            $UsbIds.Get()
         }
     }
 

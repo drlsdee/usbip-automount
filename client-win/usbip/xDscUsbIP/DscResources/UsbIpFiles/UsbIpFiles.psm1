@@ -67,12 +67,6 @@ class UsbIpFiles {
         # Getting the reference:
         [System.IO.FileInfo]$refInfo = [System.IO.FileInfo]::new($this.FileName)
 
-        # We don't know if the file exists or not. Therefore, we cannot use the [File]::Exists()
-        # method. But we can use the [Directory]::Exists() method to recognize if a given path
-        # is a folder or file path. If a directory with such fullname does not exist, we assume
-        # that the given path is a directory path and append $this.FileName to it.
-        # We also expect all source locations to exist.
-
         # Compare filenames
         if
         ($fileInfo.Name -eq $this.FileName)
@@ -114,6 +108,9 @@ class UsbIpFiles {
     [string]
     DownloadFile()
     {
+        # Get filename for downloaded file:
+        [string]$fileNameDl = [uri]::new($this.SourceUri).Segments[-1]
+        
         # Getting the temporary folder:
         [string]$folderTempPath  = [System.IO.Path]::GetTempPath()
 
@@ -121,7 +118,7 @@ class UsbIpFiles {
         [string]$fileTempPath = [System.IO.Path]::GetTempFileName()
 
         # Combining the resulting path:
-        [string]$pathResult = [System.IO.Path]::Combine($folderTempPath, $this.FileName)
+        [string]$pathResult = [System.IO.Path]::Combine($folderTempPath, $fileNameDl)
 
         # If the file with the same name exists, delete this.
         if ([System.IO.File]::Exists($pathResult)) {
@@ -153,6 +150,34 @@ class UsbIpFiles {
         }
         else {
             [string]$pathResult = $this.DownloadFile()
+        }
+        # Create [FileInfo]:
+        [System.IO.FileInfo]$fileInfo = [System.IO.FileInfo]::new($pathResult)
+        # Check extension
+        if  ($fileInfo.Extension -eq '.zip') {
+            # Call expand-archive here
+            [string]$pathResult = $this.ExtractZip($fileInfo.FullName)
+        }
+        return $pathResult
+    }
+    [string]
+    ExtractZip(
+        [string]$pathSource
+    )
+    {
+
+        [string]$folderToExtract = [System.IO.Path]::ChangeExtension($pathSource, $null).TrimEnd('.')
+        if ([System.IO.Directory]::Exists($folderToExtract)) {
+            [System.IO.Directory]::Delete($folderToExtract, $true)
+        }
+        [System.IO.Directory]::CreateDirectory($folderToExtract)
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($pathSource, $folderToExtract)
+        [string[]]$filesMatch = [System.IO.Directory]::EnumerateFiles($folderToExtract, $this.FileName, 'AllDirectories')
+        if ($filesMatch) {
+            $pathResult = $filesMatch[0]
+        }
+        else {
+            $pathResult = [System.IO.Path]::Combine($folderToExtract, $this.FileName)
         }
         return $pathResult
     }
@@ -258,11 +283,14 @@ class UsbIpFiles {
     Get()
     {
         [hashtable]$comparisonResult = $this.CompareFiles()
-        $this.SHA256CheckSum = $comparisonResult.SHA256CheckSum
-        $this.FullName = $comparisonResult.FullName
-        $this.CreationDate = $comparisonResult.CreationDate
-        $this.Ensure = $comparisonResult.Ensure
-        $this.SourcePath = $comparisonResult.SourcePath
+        [string[]]$propertiesExisting = [UsbIpFiles].GetProperties().Name
+        [string[]]$tableKeys = $comparisonResult.Keys.Where({
+            $_ -in $propertiesExisting
+        })
+        $tableKeys.ForEach({
+            [string]$keyCurrent = $_
+            $this.$keyCurrent = $comparisonResult.$keyCurrent
+        })
 
         return $this
     }
@@ -327,6 +355,166 @@ class UsbIds : UsbIpFiles {
     }
 }
 
+[DscResource()]
 class UsbIpExe : UsbIpFiles {
-    
+    # Property: SHA256 checksum of the source file
+    # Should be 'B0319236B5175B6E6D548AA3DF58DD033C69632AC6724DA50FCF14662DC161A5' for the version '0.2.0'
+    [DscProperty()]
+    [string]
+    $SHA256Patched = 'B0319236B5175B6E6D548AA3DF58DD033C69632AC6724DA50FCF14662DC161A5'
+
+    # Property: length of the target file
+    # Should be 94208 for the version '0.2.0'
+    [DscProperty()]
+    [int]
+    $LengthTarget = 94208
+
+    # Property: addresses to patch
+    # Should be 3260, 3594 (Hex: 00000CBC, 00000E0A) for the version '0.2.0'
+    [DscProperty()]
+    [int[]]
+    $AddressesToPatch = @(3260, 3594)
+
+    # Property: value to write
+    # Should be 17 (Hex: 00000011) for the version '0.2.0'
+    [DscProperty()]
+    [int]
+    $ValueToPatch = 17
+
+    # Method: returns either source file path (if given in params) or a temporary path to the downloaded file.
+    [string]
+    SelectPath()
+    {
+        if (-not $this.SourceUri) {
+            $this.SourceUri = 'https://www.dmosk.ru/files/usbip.zip'
+        }
+
+        if (-not $this.FileName) {
+            $this.FileName = 'usbip.exe'
+        }
+
+        if ($this.SourcePath) {
+            [string]$pathResult = $this.ResolvePath($this.SourcePath)
+        }
+        else {
+            [string]$pathResult = $this.DownloadFile()
+        }
+        # Create [FileInfo]:
+        [System.IO.FileInfo]$fileInfo = [System.IO.FileInfo]::new($pathResult)
+        # Check extension
+        if  ($fileInfo.Extension -eq '.zip') {
+            # Call expand-archive here
+            [string]$pathResult = $this.ExtractZip($fileInfo.FullName)
+        }
+        return $pathResult
+    }
+
+    [void]
+    PatchFile(
+        [string]$filePath
+    )
+    {
+        [System.IO.FileInfo]$fileInfo = [System.IO.FileInfo]::new($filePath).Length
+        if  ($fileInfo.Exists)
+        {
+            [string]$fileHash = (Get-FileHash -Algorithm SHA256 -Path $fileInfo.FullName).Hash
+        }
+        else
+        {
+            [string]$fileHash = $null
+        }
+
+        if
+        (
+            ($null -ne $fileHash) -and `
+            ($this.SHA256Patched -ne $fileHash) -and `
+            ($this.LengthTarget -eq $fileInfo.Length)
+        )
+        {
+            [bool]$needsToPatch = $true
+        }
+        else {
+            [bool]$needsToPatch = $false
+        }
+
+        if ($needsToPatch)
+        {
+            [string]$pathToBackup = [System.IO.Path]::ChangeExtension($fileInfo.FullName, 'bak')
+            [System.IO.File]::Copy($fileInfo.FullName, $pathToBackup, $true)
+            [byte[]]$bytesFromFile = [System.IO.File]::ReadAllBytes($fileInfo.FullName)
+            $this.AddressesToPatch.ForEach({
+                $bytesFromFile[$_] = $this.ValueToPatch
+            })
+            [System.IO.File]::WriteAllBytes($fileInfo.FullName, $bytesFromFile)
+        }
+    }
+
+    # Method: compare files.
+    [hashtable]
+    CompareFiles()
+    {
+        [string]$filePathSource = $this.SelectPath()
+        [string]$filePathDest = $this.ResolvePath($this.DestinationFolder)
+
+        [System.IO.FileInfo]$fileInfoSource = [System.IO.FileInfo]::new($filePathSource)
+        [System.IO.FileInfo]$fileInfoDest = [System.IO.FileInfo]::new($filePathDest)
+        
+
+        if
+        (
+            (-not $fileInfoSource.Exists) -and `
+            (-not $fileInfoDest.Exists)
+        )
+        {
+            [string]$checkSumSource = $null
+            [string]$checkSumDest = $null
+            [bool]$checkSumsAreEqual = $false
+        }
+        else
+        {
+            [string]$checkSumSource = (Get-FileHash -Algorithm SHA256 -Path $fileInfoSource.FullName).Hash
+            [string]$checkSumDest = (Get-FileHash -Algorithm SHA256 -Path $fileInfoDest.FullName).Hash
+            [bool]$checkSumsAreEqual = $checkSumDest -eq $this.SHA256Patched
+        }
+
+        if ($checkSumsAreEqual) {
+            [Ensure]$resourceState = [Ensure]::Present
+        }
+        else {
+            [Ensure]$resourceState = [Ensure]::Absent
+        }
+
+        if ($fileInfoDest.Exists) {
+            [Nullable[datetime]]$destCreationDate = $fileInfoDest.CreationTime
+        }
+        else {
+            [Nullable[datetime]]$destCreationDate = $null
+        }
+
+        [hashtable]$comparisonResult = @{
+            SHA256CheckSum = $checkSumDest
+            CreationDate = $destCreationDate
+            FullName = $fileInfoDest.FullName
+            Length = $fileInfoDest.Length
+            DestinationFolder = $fileInfoDest.DirectoryName
+            SourcePath = $fileInfoSource.FullName
+            Ensure = $resourceState
+        }
+
+        return $comparisonResult
+    }
+
+    # Method: sets the resource in the desired state
+    [void]
+    Set()
+    {
+        [hashtable]$comparisonResult = $this.CompareFiles()
+        if ($this.Ensure -eq [Ensure]::Absent) {
+            $this.DeleteFile($comparisonResult.FullName)
+        }
+        else {
+            $this.CreateFile($comparisonResult.SourcePath, $comparisonResult.FullName)
+            $this.PatchFile($comparisonResult.FullName)
+        }
+    }
 }

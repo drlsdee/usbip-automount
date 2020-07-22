@@ -7,6 +7,7 @@
     Copyright = '(c) 2020 drlsdee  <tracert0@gmail.com>. All rights reserved.'
     Description = 'Description should be here.'
     PowerShellVersion = '5.1'
+    RequiredAssemblies = 'System.IO.Compression.FileSystem, Version=4.0.0.0'
     FunctionsToExport = '*'
     CmdletsToExport = '*'
     VariablesToExport = '*'

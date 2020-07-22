@@ -6,69 +6,6 @@ enum Ensure {
     Present
 }
 
-class UsbIpFileInfo {
-    # Property: The full path to the file
-    [string]
-    $FullName
-
-    # Property: The full path to the folder containing the file
-    [string]
-    $DirectoryName
-
-    # Property: The file creation date. For reference only. Does not affect the comparison result.
-    [Nullable[datetime]]
-    $CreationDate
-
-    # Property: the file SHA256 checksum.
-    [string]
-    $SHA256
-
-    # Property: the file length in bytes.
-    [int]
-    $Length
-
-    # Method: Fill the file properties
-    [void]
-    GetFileInfo(
-        [string]$filePath
-    )
-    {
-        [System.IO.FileInfo]$fileInfo   = [System.IO.FileInfo]::new($filePath)
-        $this.FullName                  = $fileInfo.FullName
-        $this.DirectoryName             = $fileInfo.DirectoryName
-        $this.Length                    = $fileInfo.Length
-        $this.CreationDate              = $fileInfo.CreationTime
-        $this.SHA256                    = (Get-FileHash -Algorithm SHA256 -Path $fileInfo.FullName).Hash
-    }
-
-    # Method: Fill the file properties with null or zeroes
-    [void]
-    GetNullInfo(
-        [string]$filePath
-    )
-    {
-        $this.FullName                  = [System.IO.Path]::GetFullPath($filePath)
-        $this.DirectoryName             = [System.IO.Path]::GetDirectoryName($filePath)
-        $this.SHA256                    = $null
-        $this.CreationDate              = $null
-        $this.Length                    = $null
-    }
-
-    # Constructor:
-    UsbIpFileInfo(
-        [string]$filePath
-    )
-    {
-        if ([System.IO.File]::Exists($filePath))
-        {
-            $this.GetFileInfo($filePath)
-        }
-        else {
-            $this.GetNullInfo($filePath)
-        }
-    }
-}
-
 class UsbIpFiles {
     # Property: full path to the destination folder. Must be a key property in DSC resources.
     [DscProperty(Key)]
@@ -125,54 +62,39 @@ class UsbIpFiles {
         $pathSource
     )
     {
-        # Getting the absolute path:
-        [string]$pathSource = [System.IO.Path]::GetFullPath($pathSource)
-        # Getting the filename from the given path:
-        [string]$fileNameDef = [System.IO.Path]::GetFileName($pathSource)
-
-        # Getting the basename from the given path:
-        [string]$baseNameDef = [System.IO.Path]::GetFileNameWithoutExtension($pathSource)
-        # and getting the file basename from the class properties:
-        [string]$baseNameProp = [System.IO.Path]::GetFileNameWithoutExtension($this.FileName)
-
-        # Getting the file extension from the given path:
-        [string]$fileExtDef = [System.IO.Path]::GetExtension($pathSource)
-        # and getting the file extension from the class properties:
-        [string]$fileExtProp = [System.IO.Path]::GetExtension($this.FileName)
+        # Getting the FileInfo:
+        [System.IO.FileInfo]$fileInfo = [System.IO.FileInfo]::new($pathSource)
+        # Getting the reference:
+        [System.IO.FileInfo]$refInfo = [System.IO.FileInfo]::new($this.FileName)
 
         # We don't know if the file exists or not. Therefore, we cannot use the [File]::Exists()
         # method. But we can use the [Directory]::Exists() method to recognize if a given path
         # is a folder or file path. If a directory with such fullname does not exist, we assume
-        # that the given path is a directory path and append $ this.FileName to it.
+        # that the given path is a directory path and append $this.FileName to it.
         # We also expect all source locations to exist.
-
-        <# if ([System.IO.Directory]::Exists($pathSource)) {
-            # The given path is probably a directory path.
-            # Yes, the file with the same name may exist too.
-        } #>
 
         # Compare filenames
         if
-        ($fileNameDef -eq $this.FileName)
+        ($fileInfo.Name -eq $this.FileName)
         {
             # We assume that the given path is a file path. Although the directory with the same
             # name may exist too. In that case the file with given name does not exist.
             # If we resolve the source path, we expect the source files exist. If we resolve
             # the destination path, and the directory with the target name already exists,
             # THE DIRECTORY WILL BE REMOVED.
-            [string]$pathResult = $pathSource
+            [string]$pathResult = $fileInfo.FullName
         }
         elseif
         (
-            ($baseNameDef -eq $baseNameProp) -and ` # Basenames are equal
-            ($null -ne $fileExtDef)                 # and the extension is present
+            ($fileInfo.BaseName -eq $refInfo.BaseName) -and `   # Basenames are equal
+            ($null -ne $fileInfo.Extension)                     # and the extension is present
         )
         {
             # We assume that the given path is a file path, again. And the directory may exist too,
             # but we can create the file with the same basename and defined extension.
             # If we resolve the destination path, and the file with the same name already exists,
             # THE FILE WILL BE OVERWRITTEN.
-            [string]$pathResult = [System.IO.Path]::ChangeExtension($pathSource, $fileExtProp)
+            [string]$pathResult = [System.IO.Path]::ChangeExtension($fileInfo.FullName, $refInfo.Extension)
         }
         else
         {
@@ -180,7 +102,7 @@ class UsbIpFiles {
             # or filenames are not equal at all.
             # Here we expect that the given path is a folder path.
             # And all files should be placed inside that folder.
-            [string]$pathResult = [System.IO.Path]::Combine($pathSource, $this.FileName)
+            [string]$pathResult = [System.IO.Path]::Combine($fileInfo.FullName, $this.FileName)
         }
 
         # Returning the resulting path:
@@ -192,32 +114,31 @@ class UsbIpFiles {
     [string]
     DownloadFile()
     {
-        # Getting the temporary file name. It will be a folder!
-        [string]$folderTempPath  = [System.IO.Path]::GetTempFileName()
+        # Getting the temporary folder:
+        [string]$folderTempPath  = [System.IO.Path]::GetTempPath()
+
+        # Getting the temporary filename:
+        [string]$fileTempPath = [System.IO.Path]::GetTempFileName()
 
         # Combining the resulting path:
         [string]$pathResult = [System.IO.Path]::Combine($folderTempPath, $this.FileName)
 
-        # If the files with the same names exist, delete them.
-        @(
-            $folderTempPath,
-            $pathResult
-        ).ForEach({
-            if ([System.IO.File]::Exists($_)) {
-                [System.IO.File]::Delete($_)
-            }
-        })
-
-        # If the directory does not exist, create this.
-        if (-not [System.IO.Directory]::Exists($folderTempPath)) {
-            # I just assign the result of the directory creation
-            # to the $null to prevent unwanted output.
-            $null = [System.IO.Directory]::CreateDirectory($folderTempPath)
+        # If the file with the same name exists, delete this.
+        if ([System.IO.File]::Exists($pathResult)) {
+            [System.IO.File]::Delete($pathResult)
         }
 
         # Create an instance of the web client and download the file.
         [System.Net.WebClient]$webClient = [System.Net.WebClient]::new()
-        $webClient.DownloadFile($this.SourceUri, $pathResult)
+        $webClient.DownloadFile($this.SourceUri, $fileTempPath)
+
+        # If the file downloades successfully, copy them:
+        if ([System.IO.File]::Exists($fileTempPath)) {
+            [System.IO.File]::Copy($fileTempPath, $pathResult, $true)
+        }
+
+        # and remove the temporary file:
+        [System.IO.File]::Delete($fileTempPath)
 
         # Returning the resulting path:
         return $pathResult
@@ -271,22 +192,10 @@ class UsbIpFiles {
         $filePathToRemove
     )
     {
-        # Getting the drive letter:
-        #[string]$pathRoot = [System.IO.Path]::GetPathRoot($filePathToRemove)
         # Removing the file if exists.
         if ([System.IO.File]::Exists($filePathToRemove)) {
             [System.IO.File]::Delete($filePathToRemove)
         }
-    }
-
-    # Method: gets fileinfo for comparison.
-    [UsbIpFileInfo]
-    GetFileInfo(
-        [string]$filePath
-    )
-    {
-        [UsbIpFileInfo]$fileInfo = [UsbIpFileInfo]::new($filePath)
-        return $fileInfo
     }
 
     # Method: compare files.
@@ -296,20 +205,25 @@ class UsbIpFiles {
         [string]$filePathSource = $this.SelectPath()
         [string]$filePathDest = $this.ResolvePath($this.DestinationFolder)
 
-        [UsbIpFileInfo]$fileInfoSource = $this.GetFileInfo($filePathSource)
-        [UsbIpFileInfo]$fileInfoDest = $this.GetFileInfo($filePathDest)
+        [System.IO.FileInfo]$fileInfoSource = [System.IO.FileInfo]::new($filePathSource)
+        [System.IO.FileInfo]$fileInfoDest = [System.IO.FileInfo]::new($filePathDest)
+        
 
         if
         (
-            ($null -eq $fileInfoSource.SHA256) -and `
-            ($null -eq $fileInfoDest.SHA256)
+            (-not $fileInfoSource.Exists) -and `
+            (-not $fileInfoDest.Exists)
         )
         {
-            [bool]$checkSumsAreEqual = $null
+            [string]$checkSumSource = $null
+            [string]$checkSumDest = $null
+            [bool]$checkSumsAreEqual = $false
         }
         else
         {
-            [bool]$checkSumsAreEqual = $fileInfoDest.SHA256 -eq $fileInfoSource.SHA256
+            [string]$checkSumSource = (Get-FileHash -Algorithm SHA256 -Path $fileInfoSource.FullName).Hash
+            [string]$checkSumDest = (Get-FileHash -Algorithm SHA256 -Path $fileInfoDest.FullName).Hash
+            [bool]$checkSumsAreEqual = $checkSumSource -eq $checkSumDest
         }
 
         if ($checkSumsAreEqual) {
@@ -319,13 +233,20 @@ class UsbIpFiles {
             [Ensure]$resourceState = [Ensure]::Absent
         }
 
+        if ($fileInfoDest.Exists) {
+            [Nullable[datetime]]$destCreationDate = $fileInfoDest.CreationTime
+        }
+        else {
+            [Nullable[datetime]]$destCreationDate = $null
+        }
+
         [hashtable]$comparisonResult = @{
-            CheckSum = $fileInfoDest.SHA256
-            CreationDate = $fileInfoDest.CreationDate
+            SHA256CheckSum = $checkSumDest
+            CreationDate = $destCreationDate
             FullName = $fileInfoDest.FullName
             Length = $fileInfoDest.Length
             DestinationFolder = $fileInfoDest.DirectoryName
-            SourcePath = $filePathSource
+            SourcePath = $fileInfoSource.FullName
             Ensure = $resourceState
         }
 
@@ -337,7 +258,7 @@ class UsbIpFiles {
     Get()
     {
         [hashtable]$comparisonResult = $this.CompareFiles()
-        $this.SHA256CheckSum = $comparisonResult.CheckSum
+        $this.SHA256CheckSum = $comparisonResult.SHA256CheckSum
         $this.FullName = $comparisonResult.FullName
         $this.CreationDate = $comparisonResult.CreationDate
         $this.Ensure = $comparisonResult.Ensure
@@ -404,4 +325,8 @@ class UsbIds : UsbIpFiles {
         }
         return $pathResult
     }
+}
+
+class UsbIpExe : UsbIpFiles {
+    
 }

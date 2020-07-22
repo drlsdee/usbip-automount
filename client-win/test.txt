@@ -1,0 +1,20 @@
+﻿[string]$VerbosePreferenceOld = $VerbosePreference
+$VerbosePreference = 'Continue'
+[string]$moduleName = 'xDscUsbIP'
+[string]$resourceName = 'UsbIds.psm1'
+[string]$folderSrc = 'C:\Users\Administrator\GitHub\usbip-automount\client-win\usbip'
+[string]$pathSrc = [System.IO.Path]::Combine($folderSrc, $moduleName)
+[string]$pathRes = [System.IO.Path]::Combine($pathSrc, $resourceName)
+[string]$pathManifest = [System.IO.Directory]::EnumerateFiles($pathSrc, "$($moduleName).psd1")
+[hashtable]$manifestTable = Import-PowerShellDataFile -Path $pathManifest
+[string[]]$propsToSelect = $manifestTable.Keys
+[string]$pathDst = 'C:\Program Files\WindowsPowerShell\Modules'
+[string]$pathResult = [System.IO.Path]::Combine($pathDst, $moduleName)
+Copy-Item -Path $pathSrc -Destination $pathDst -Container -Force -Recurse -Verbose
+Get-Module -Name $moduleName -ListAvailable | Select-Object -Property $propsToSelect | Format-List
+Import-Module -Name $moduleName -Force -Verbose
+Get-DscResource -Module $moduleName -Verbose
+Invoke-UsbIds -Verbose -Destination 'C:\temp\' -Ensure Present -Method Get
+Remove-Module -Name $moduleName -Force -Verbose
+Remove-Item -Path $pathResult -Recurse -Force -Verbose
+$VerbosePreference = $VerbosePreferenceOld
